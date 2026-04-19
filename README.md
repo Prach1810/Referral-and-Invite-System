@@ -9,9 +9,9 @@ Built with FastAPI, PostgreSQL, Redis, and RQ.
 ## Quick Start
 
 ```bash
-git clone <repo>
-cd flik-referral
-cp .env.example .env
+git clone https://github.com/Prach1810/Referral-and-Invite-System.git
+cd Referral-and-Invite-System 
+cp .env
 docker-compose up --build
 ```
 
