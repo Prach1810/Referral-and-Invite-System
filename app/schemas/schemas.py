@@ -229,6 +229,7 @@ class AnomalyEntry(BaseModel):
     unique_ips: int
     time_variance_minutes: float
     anomaly_score: int
+    risk_score: int
     first_event: datetime
     last_event: datetime
 

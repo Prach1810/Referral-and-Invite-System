@@ -12,6 +12,20 @@ from app.schemas.schemas import AnomaliesResponse, AnomalyEntry
 router = APIRouter(prefix="/admin", tags=["Admin"])
 
 
+def _normalize_risk_scores(raw_values: list[float]) -> list[int]:
+    """
+    Convert raw anomaly severity values to a 0-100 risk scale.
+    Higher means more suspicious.
+    """
+    if not raw_values:
+        return []
+    min_v = min(raw_values)
+    max_v = max(raw_values)
+    if max_v == min_v:
+        return [50 for _ in raw_values]
+    return [int(round(((v - min_v) / (max_v - min_v)) * 100)) for v in raw_values]
+
+
 @router.get("/anomalies", response_model=AnomaliesResponse)
 async def get_anomalies(
     current_user=Depends(get_admin_user),
@@ -52,13 +66,24 @@ async def get_anomalies(
     if len(rows) >= 10:
         model = IsolationForest(contamination=0.05, random_state=42)
         scores = model.fit_predict(features_array)
+        # decision_function: higher is more normal; negate for anomaly severity.
+        raw_risk = (-model.decision_function(features_array)).tolist()
+        risk_scores = _normalize_risk_scores(raw_risk)
     else:
         # rule-based fallback: >20 events in <120 minutes
         scores = []
+        raw_risk = []
         for f in features:
             event_count, time_variance = f
             is_anomaly = event_count > 20 and time_variance < 120
             scores.append(-1 if is_anomaly else 1)
+            # Rule severity:
+            # - event_count overflow above 20 contributes up to 70 points
+            # - faster time window (<120m) contributes up to 30 points
+            count_component = min(max((event_count - 20) * 7, 0), 70)
+            time_component = min(max((120 - time_variance) / 120 * 30, 0), 30)
+            raw_risk.append(float(count_component + time_component))
+        risk_scores = _normalize_risk_scores(raw_risk)
 
     # collect unique IPs per user for the response
     unique_ips_result = await db.execute(
@@ -96,6 +121,7 @@ async def get_anomalies(
                 unique_ips=unique_ips_map.get(row.user_id, 1),
                 time_variance_minutes=round(time_variance, 2),
                 anomaly_score=-1,
+                risk_score=risk_scores[i],
                 first_event=row.first_event,
                 last_event=row.last_event
             ))

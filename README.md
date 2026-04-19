@@ -245,13 +245,15 @@ as admin to see the Isolation Forest flag the suspicious account.
 ## What I Would Add With More Time
 
 - Email provider integration (SendGrid/SES) for actual invite delivery
-- Streak and engagement badges (schema ready; award logic not wired)
+- STREAK and ENGAGEMENT badges (schema ready; award logic not wired)
+- STREAK badge: "Rising Star" for 5 consecutive posting days
+- ENGAGEMENT badge: awarded for commenting/liking activity
 - Separate `PUT /auth/change-password` and `PUT /auth/change-email` flows with re-authentication
 - Pre-generated referral code pool to handle high-concurrency signup bursts
 - Pagination on `/invitations/me`, `/referrals/me`, `/credits/me`
 - Credit expiration via scheduled task
 - WebSocket or SSE for real-time conversion notifications
-- Structured logging (JSON) + distributed tracing
+- Structured JSON logging with correlation IDs (uvicorn already logs requests; production would add log aggregation via Datadog/Grafana)
 
 ---
 
@@ -267,8 +269,8 @@ Claude (Anthropic) was used throughout:
 
 ## Running Tests
 
+### Unit tests (no Docker needed)
 ```bash
-docker-compose exec web pytest tests/ -v
+docker compose ps && docker compose exec web pytest tests/unit/test_core.py -v
 ```
-
-Unit tests cover: reward logic idempotency, rate limiting, fraud detection heuristics, JWT security, code generation, invitation expiry logic.
+Covers: tier reward logic, idempotency, rate limiting, fraud detection heuristics, JWT security, code generation, invitation expiry.
