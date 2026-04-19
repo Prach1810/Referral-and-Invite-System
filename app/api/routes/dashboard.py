@@ -5,11 +5,17 @@ from sqlalchemy import select, func, update
 from app.db.session import get_db
 from app.core.datetime_utils import utc_now_naive
 from app.core.dependencies import get_current_user
+from app.core.tier_rewards import inviter_tier_multiplier
 from app.models.models import (
-    User, Invitation, Referral,
-    InvitationStatus, ReferralStatus
+    User,
+    Invitation,
+    InvitationStatus,
+    Referral,
+    ReferralStatus,
+    Badge,
+    UserBadge,
 )
-from app.schemas.schemas import DashboardResponse
+from app.schemas.schemas import DashboardResponse, EarnedBadgeEntry
 
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 
@@ -47,31 +53,49 @@ async def get_my_dashboard(
         )
         return result.scalar()
 
-    async def get_converted():
-        result = await db.execute(
+    async def get_converted_and_balance():
+        converted_result = await db.execute(
             select(func.count()).where(
                 Referral.inviter_id == current_user.id,
-                Referral.status == ReferralStatus.CONVERTED
+                Referral.status == ReferralStatus.CONVERTED,
             )
         )
-        return result.scalar()
-
-    async def get_balance():
-        result = await db.execute(
+        balance_result = await db.execute(
             select(User.credits_balance).where(User.id == current_user.id)
         )
-        return result.scalar()
+        return int(converted_result.scalar() or 0), int(balance_result.scalar() or 0)
 
-    total_invites, pending, converted, balance = await asyncio.gather(
+    async def get_earned_badges():
+        result = await db.execute(
+            select(Badge, UserBadge.earned_at)
+            .join(UserBadge, UserBadge.badge_id == Badge.id)
+            .where(UserBadge.user_id == current_user.id)
+            .order_by(UserBadge.earned_at.desc())
+        )
+        rows = result.all()
+        return [
+            EarnedBadgeEntry(
+                badge_id=badge.id,
+                badge_type=badge.badge_type,
+                badge_name=badge.badge_name,
+                description=badge.description,
+                earned_at=earned_at,
+            )
+            for badge, earned_at in rows
+        ]
+
+    total_invites, pending, (converted, balance), earned = await asyncio.gather(
         get_total_invites(),
         get_pending(),
-        get_converted(),
-        get_balance()
+        get_converted_and_balance(),
+        get_earned_badges(),
     )
 
     return DashboardResponse(
         total_invites_sent=total_invites,
         pending_referrals=pending,
         total_converted=converted,
-        credits_balance=balance
+        current_multiplier=inviter_tier_multiplier(converted),
+        credits_balance=balance,
+        earned_badges=earned,
     )

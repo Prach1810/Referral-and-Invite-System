@@ -24,6 +24,7 @@ async def get_current_user(
         detail="Invalid or expired token",
     )
 
+    # check blacklist
     payload = decode_token(token)
     if payload is None:
         raise credentials_exception

@@ -54,6 +54,12 @@ class RateLimitAction(str, enum.Enum):
     CODE_REDEMPTION = "CODE_REDEMPTION"
 
 
+class BadgeType(str, enum.Enum):
+    REFERRAL = "REFERRAL"
+    STREAK = "STREAK"
+    ENGAGEMENT = "ENGAGEMENT"
+
+
 class User(Base):
     __tablename__ = "users"
 
@@ -72,6 +78,7 @@ class User(Base):
     referral_codes = relationship("ReferralCode", back_populates="owner", foreign_keys="ReferralCode.owner_id")
     sent_invitations = relationship("Invitation", back_populates="inviter", foreign_keys="Invitation.inviter_id")
     posts = relationship("Post", back_populates="author")
+    earned_badges = relationship("UserBadge", back_populates="user", foreign_keys="UserBadge.user_id")
 
 
 class ReferralCode(Base):
@@ -177,3 +184,29 @@ class Post(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     author = relationship("User", back_populates="posts")
+
+
+class Badge(Base):
+    __tablename__ = "badges"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    badge_type = Column(SAEnum(BadgeType), nullable=False)
+    badge_name = Column(String(128), nullable=False)
+    description = Column(String(512), nullable=False)
+    threshold = Column(Integer, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    user_badges = relationship("UserBadge", back_populates="badge")
+
+
+class UserBadge(Base):
+    __tablename__ = "user_badges"
+    __table_args__ = (UniqueConstraint("user_id", "badge_id", name="uq_user_badges_user_badge"),)
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    badge_id = Column(UUID(as_uuid=True), ForeignKey("badges.id", ondelete="CASCADE"), nullable=False)
+    earned_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    user = relationship("User", back_populates="earned_badges", foreign_keys=[user_id])
+    badge = relationship("Badge", back_populates="user_badges")

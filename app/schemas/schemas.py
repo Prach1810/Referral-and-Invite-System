@@ -4,7 +4,7 @@ from datetime import datetime
 from uuid import UUID
 from app.models.models import (
     UserRole, CampaignType, InvitationStatus,
-    ReferralStatus, ReferralSource, SignupSource, CreditReason
+    ReferralStatus, ReferralSource, SignupSource, CreditReason, BadgeType,
 )
 
 
@@ -34,6 +34,8 @@ class TokenResponse(BaseModel):
 
 class RegisterResponse(BaseModel):
     user_id: UUID
+    first_name: str
+    last_name: str
     referral_code: str
     referred_by: Optional[UUID]
     access_token: str
@@ -186,11 +188,21 @@ class MyCreditsResponse(BaseModel):
 
 # ── Dashboard ─────────────────────────────────────────────────────────────────
 
+class EarnedBadgeEntry(BaseModel):
+    badge_id: UUID
+    badge_type: BadgeType
+    badge_name: str
+    description: str
+    earned_at: datetime
+
+
 class DashboardResponse(BaseModel):
     total_invites_sent: int
     pending_referrals: int
     total_converted: int
+    current_multiplier: float
     credits_balance: int
+    earned_badges: List[EarnedBadgeEntry]
 
 
 # ── Leaderboard ───────────────────────────────────────────────────────────────

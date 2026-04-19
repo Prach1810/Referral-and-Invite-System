@@ -15,6 +15,19 @@ cp .env
 docker-compose up --build
 ```
 
+Apply SQL migrations (from the repo root, against the running `db` service):
+
+```bash
+cat migrations/001_initial.sql | docker compose exec -T db psql -U flik -d flikdb
+cat migrations/002_badges_and_tiers.sql | docker compose exec -T db psql -U flik -d flikdb
+```
+
+Then seed the first admin user:
+
+```bash
+docker compose exec web python scripts/seed_admin.py
+```
+
 API docs available at: http://localhost:8000/docs
 
 ---
@@ -94,11 +107,33 @@ with session.begin():
     # ... insert credits, update balances
 ```
 
-### 6. credits_balance is a denormalized cache
+### 6. credits_balance is the denormalized cache
 
-The `users.credits_balance` field is a running total for fast reads (used in dashboard, profile). The `credits_ledger` table is always the source of truth. Every credit change is an immutable append — never a mutation.
+**`credits_balance`** is the inviter’s or user’s **cached running total** (updated atomically by the RQ worker whenever credits are awarded). The **`credits_ledger`** remains the immutable source of truth for audit and reconciliation.
 
 Negative credits are not implemented in this scope, but the ledger pattern is forward-compatible for a future "spend credits on generation" feature.
+
+### 6b. Tiered inviter rewards (conversion count)
+
+Only the **inviter** portion of the referral conversion reward is tiered; the **invitee** reward stays **25** credits.
+
+| Lifetime converted referrals (after this event) | Multiplier | Inviter total for that event |
+|-------------------------------------------------|------------|------------------------------|
+| 1–5 | 1.0× | 50 |
+| 6–10 | 1.5× | 75 |
+| 11+ | 3.0× | 150 |
+
+The worker always writes **two ledger lines** when a tier bonus applies: **`REFERRAL_INVITER` = 50** (base slice) plus **`BONUS_TIER`** for the remainder (e.g. 25 at tier 1.5×, 100 at 3×). Tier 1–5 only records the single 50-credit inviter line.
+
+### 6c. Badges catalogue + `user_badges` (many-to-many)
+
+We model badges as a **catalogue** (`badges`) plus **earned instances** (`user_badges`), not as columns on `users`.
+
+- **`badge_type`**: `REFERRAL`, `STREAK`, `ENGAGEMENT` — groups the *reason* you can earn something. Worker awarding is currently scoped to `REFERRAL` milestones.
+- **`badge_name` + `threshold`**: multiple rows per type (e.g. STREAK at 5 posts, REFERRAL at 10/20/30) without widening the users table every time product adds a badge.
+- **`user_badges`**: which user earned which catalogue row and **`earned_at`**. Unique `(user_id, badge_id)` prevents duplicates.
+
+**Not implemented in code (by design):** streak badges (e.g. posting N days in a row) and engagement badges (e.g. comments on others’ batches). The same schema supports them later: insert new `badges` rows with `STREAK` / `ENGAGEMENT` and award from future workers or cron jobs. We intentionally do not use a REFERRAL threshold at 5.
 
 ### 7. RQ over Kafka/SQS
 
@@ -142,7 +177,8 @@ Full interactive docs at http://localhost:8000/docs
 | GET | /referrals/me | Yes | Referral breakdown by source/status |
 | POST | /posts | Yes | Create post (triggers conversion internally) |
 | GET | /credits/me | Yes | Credits ledger history |
-| GET | /dashboard/me | Yes | Summary stats |
+| GET | /dashboard/me | Yes | Summary stats, computed `current_multiplier`, credits, earned badges |
+| GET | /badges/me | Yes | List earned badges for current user |
 | GET | /leaderboard | No | Monthly top referrers |
 | POST | /admin/referral-codes | Admin | Create PROMO campaign code |
 | GET | /admin/anomalies | Admin | Flagged suspicious accounts |
@@ -164,14 +200,19 @@ Full interactive docs at http://localhost:8000/docs
 
 ```
 users
+  credits_balance             (denormalized running total)
   └── referral_codes (owner_id)
   └── invitations (inviter_id)
   └── referrals (inviter_id, invitee_id)
   └── posts (author_id)
   └── credits_ledger (user_id)
+  └── user_badges (user_id) ──► badges (catalogue)
 
 referrals
   └── conversion_events (referral_id)
+
+badges            -- catalogue: badge_type, badge_name, description, threshold
+user_badges       -- M2M: user_id, badge_id, earned_at
 
 rate_limit_events (audit trail for anomaly detection)
 ```
@@ -190,12 +231,21 @@ rate_limit_events (audit trail for anomaly detection)
 - **Multi-account gaming:** Graph analysis on referral chains to detect star patterns (one account referring dozens of new accounts). Device fingerprinting via user-agent + browser fingerprint. IP subnet clustering — accounts from the same /24 subnet treated as related.
 - **Credit farming:** Detect accounts that convert quickly (create post immediately after signup) with no organic usage pattern.
 
+**Testing anomaly detection:**
+A demo script is included to seed realistic event patterns:
+```bash
+docker-compose exec web python scripts/demo_anomalies.py
+```
+This seeds 25 SIGNUP events from a single IP in under 60 minutes (suspicious) 
+and 3 events spread over 5 hours (normal). Then hit `GET /admin/anomalies` 
+as admin to see the Isolation Forest flag the suspicious account.
+
 ---
 
 ## What I Would Add With More Time
 
 - Email provider integration (SendGrid/SES) for actual invite delivery
-- Tiered rewards: bonus multiplier after 5 conversions, Flik Pro badge after 10
+- Streak and engagement badges (schema ready; award logic not wired)
 - Separate `PUT /auth/change-password` and `PUT /auth/change-email` flows with re-authentication
 - Pre-generated referral code pool to handle high-concurrency signup bursts
 - Pagination on `/invitations/me`, `/referrals/me`, `/credits/me`

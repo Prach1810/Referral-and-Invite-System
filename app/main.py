@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
 from app.db.session import engine, Base
-from app.api.routes import auth, users, referral_codes, invitations, referrals, posts, credits, dashboard, leaderboard, admin
+from app.api.routes import auth, users, referral_codes, invitations, referrals, posts, credits, dashboard, leaderboard, admin, badges
 
 
 @asynccontextmanager
@@ -15,17 +15,17 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Flik Referral System",
     description="""
-## Flik Referral & Invite System
+    ## Flik Referral & Invite System
 
-A production-scale referral system supporting:
-- **Referral codes** (permanent default + time-limited promo campaigns)
-- **Explicit email invites** with expiry tracking
-- **Passive link-based referrals** via shareable URLs
-- **Conversion tracking** triggered by first content creation
-- **Credits ledger** with idempotent reward processing via async RQ workers
-- **Leaderboard** with Redis caching
-- **Anomaly detection** using Isolation Forest on referral patterns
-    """,
+    A production-scale referral system supporting:
+    - **Referral codes** (permanent default + time-limited promo campaigns)
+    - **Explicit email invites** with expiry tracking
+    - **Passive link-based referrals** via shareable URLs
+    - **Conversion tracking** triggered by first content creation
+    - **Credits ledger** with idempotent reward processing via async RQ workers
+    - **Leaderboard** with Redis caching
+    - **Anomaly detection** using Isolation Forest on referral patterns
+        """,
     version="1.0.0",
     lifespan=lifespan
 )
@@ -41,6 +41,7 @@ app.include_router(credits.router)
 app.include_router(dashboard.router)
 app.include_router(leaderboard.router)
 app.include_router(admin.router)
+app.include_router(badges.router)
 
 
 @app.get("/health", tags=["Health"])

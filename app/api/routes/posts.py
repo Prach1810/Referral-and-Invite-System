@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
-from rq import Queue
+from rq import Queue, Retry
 from app.db.session import get_db
 from app.core.dependencies import get_current_user
 from app.core.redis import get_redis
@@ -69,7 +69,7 @@ async def create_post(
                 q.enqueue(
                     "app.workers.conversion_worker.process_conversion",
                     str(conversion_event.id),
-                    retry=3
+                    retry=Retry(max=3, interval=5)
                 )
 
     await db.commit()

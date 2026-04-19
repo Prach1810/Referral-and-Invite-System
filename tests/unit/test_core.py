@@ -6,11 +6,63 @@ from datetime import datetime, timedelta
 
 # ── Reward Logic Tests ────────────────────────────────────────────────────────
 
+class TestTierRewards:
+    def test_inviter_tier_totals(self):
+        from app.core.tier_rewards import inviter_reward_total_credits
+
+        assert inviter_reward_total_credits(1) == 50
+        assert inviter_reward_total_credits(5) == 50
+        assert inviter_reward_total_credits(6) == 75
+        assert inviter_reward_total_credits(10) == 75
+        assert inviter_reward_total_credits(11) == 150
+
+    def test_tier_1_to_5_base_rate(self):
+        from app.core.tier_rewards import inviter_tier_multiplier, inviter_reward_total_credits
+        for n in range(1, 6):
+            assert inviter_tier_multiplier(n) == 1.0
+            assert inviter_reward_total_credits(n) == 50
+
+    def test_tier_6_to_10_one_and_half(self):
+        from app.core.tier_rewards import inviter_tier_multiplier, inviter_reward_total_credits
+        for n in range(6, 11):
+            assert inviter_tier_multiplier(n) == 1.5
+            assert inviter_reward_total_credits(n) == 75
+
+    def test_tier_11_plus_triple(self):
+        from app.core.tier_rewards import inviter_tier_multiplier, inviter_reward_total_credits
+        for n in [11, 12, 20, 100]:
+            assert inviter_tier_multiplier(n) == 3.0
+            assert inviter_reward_total_credits(n) == 150
+
+    def test_bonus_delta_at_tier_2(self):
+        from app.core.tier_rewards import inviter_reward_total_credits, INVITER_BASE_CREDITS
+        total = inviter_reward_total_credits(6)
+        bonus = total - INVITER_BASE_CREDITS
+        assert bonus == 25
+
+    def test_no_bonus_delta_in_base_tier(self):
+        from app.core.tier_rewards import inviter_reward_total_credits, INVITER_BASE_CREDITS
+        total = inviter_reward_total_credits(3)
+        bonus = total - INVITER_BASE_CREDITS
+        assert bonus == 0
+
+    def test_boundary_at_5(self):
+        from app.core.tier_rewards import inviter_tier_multiplier
+        assert inviter_tier_multiplier(5) == 1.0
+        assert inviter_tier_multiplier(6) == 1.5
+
+    def test_boundary_at_10(self):
+        from app.core.tier_rewards import inviter_tier_multiplier
+        assert inviter_tier_multiplier(10) == 1.5
+        assert inviter_tier_multiplier(11) == 3.0
+
+
 class TestConversionWorker:
 
     def test_process_conversion_awards_correct_credits(self):
-        """Inviter gets 50, invitee gets 25 on conversion"""
+        """Base inviter slice is 50; invitee gets 25 on conversion"""
         from app.workers.conversion_worker import INVITER_CREDITS, INVITEE_CREDITS
+
         assert INVITER_CREDITS == 50
         assert INVITEE_CREDITS == 25
 
@@ -183,20 +235,22 @@ class TestSecurity:
 # ── Invitation Expiry Tests ───────────────────────────────────────────────────
 
 class TestInvitationExpiry:
-
     def test_default_code_expiry_is_30_days(self):
-        now = datetime.utcnow()
+        from app.core.datetime_utils import utc_now_naive
+        now = utc_now_naive()
         expired_at = now + timedelta(days=30)
         assert (expired_at - now).days == 30
 
     def test_promo_code_expiry_uses_min(self):
-        now = datetime.utcnow()
+        from app.core.datetime_utils import utc_now_naive
+        now = utc_now_naive()
         code_expires = now + timedelta(days=5)   # promo expires in 5 days
         invite_window = now + timedelta(days=30)  # default 30 days
         expired_at = min(invite_window, code_expires)
         assert expired_at == code_expires         # promo wins
 
     def test_invitation_past_expiry_is_expired(self):
-        expired_at = datetime.utcnow() - timedelta(hours=1)
-        is_expired = expired_at < datetime.utcnow()
+        from app.core.datetime_utils import utc_now_naive
+        expired_at = utc_now_naive() - timedelta(hours=1)
+        is_expired = expired_at < utc_now_naive()
         assert is_expired is True
