@@ -5,6 +5,7 @@ from app.core.config import settings
 from app.core.redis import get_redis
 from app.core.datetime_utils import utc_now_naive
 from app.core.tier_rewards import INVITER_BASE_CREDITS, inviter_reward_total_credits
+from app.core.outbound_mail import send_invite_email_sync
 from app.models.models import (
     ConversionEvent,
     Referral,
@@ -138,8 +139,9 @@ def process_conversion(conversion_event_id: str):
 
 def send_invite_email(invitee_email: str, inviter_name: str, shareable_link: str):
     """
-    RQ job: sends invite email.
-    In production, integrate with SendGrid/SES/etc.
+    RQ job: sends the invitation email (SendGrid, SMTP, or log-only if unconfigured).
+
+    Configure either ``SENDGRID_API_KEY`` or ``SMTP_HOST`` plus ``MAIL_FROM_EMAIL``.
+    Raises on delivery failure so the queue can retry.
     """
-    print(f"[EMAIL] Sending invite to {invitee_email} from {inviter_name}: {shareable_link}")
-    # TODO: integrate real email provider
+    send_invite_email_sync(invitee_email, inviter_name, shareable_link)
