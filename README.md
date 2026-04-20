@@ -10,11 +10,11 @@ Built with FastAPI, PostgreSQL, Redis, and RQ.
 
 I chose the Referral & Invite System over the AI Video Studio for three reasons.
 
-First, my background maps directly to this problem. My work at JPMorgan Chase involved building middle office P&L and risk management systems — credits ledgers, idempotent event processing, and financial audit trails. The referral system is structurally the same domain: immutable ledger entries, atomic credit awards, and event-driven state transitions.
+First, my background maps directly to this problem. My work at JPMorgan Chase involved building middle office P&L and risk management systems involving credits ledgers, idempotent event processing, and financial audit trails. The referral system is structurally the same domain: immutable ledger entries, atomic credit awards, and event-driven state transitions.
 
-Second, Option A rewards depth of thinking over breadth of integration. Option B's core challenge is wiring together third-party APIs (video generation, object storage, WebSockets) — impressive to demo but evaluated mostly on integration plumbing. Option A has no external dependencies and is entirely about architecture: how you model the data, handle idempotency, prevent fraud, and design for scale. That's a better signal of engineering judgment.
+Second, Option A rewards depth of thinking over breadth of integration. Option B's core challenge is wiring together third-party APIs (video generation, object storage, WebSockets), impressive to demo but evaluated mostly on integration plumbing. Option A has no external dependencies and is entirely about architecture: how you model the data, handle idempotency, prevent fraud, and design for scale. That's a better signal of engineering judgment.
 
-Third, the stretch goals in Option A are genuinely interesting engineering problems — tiered rewards, async event processing, anomaly detection — rather than UI polish. I wanted to build something I could reason about deeply rather than something that looked good in a screen recording.
+Third, the stretch goals in Option A are genuinely interesting engineering problems, like tiered rewards, async event processing, anomaly detection — rather than UI polish. I wanted to build something I could reason about deeply rather than something that looked good in a screen recording.
 
 Demo Link : https://drive.google.com/file/d/1ovJFQTzlQ7TE5XrIZZ9N_nWR-OlZZOZS/view?usp=sharing
 
@@ -25,7 +25,7 @@ Demo Link : https://drive.google.com/file/d/1ovJFQTzlQ7TE5XrIZZ9N_nWR-OlZZOZS/vi
 ```bash
 git clone https://github.com/Prach1810/Referral-and-Invite-System.git
 cd Referral-and-Invite-System 
-cp .env
+cp .env.example .env
 docker-compose up --build
 ```
 
@@ -281,6 +281,8 @@ This seeds 25 SIGNUP events from a single IP in under 60 minutes (suspicious)
 and 3 events spread over 5 hours (normal). Then hit `GET /admin/anomalies` 
 as admin to see the Isolation Forest flag the suspicious account.
 
+Note: Run the main test flow first to ensure alice@test.com and bob@test.com exist.
+
 ---
 
 ## What I Would Add With More Time
@@ -299,7 +301,7 @@ as admin to see the Isolation Forest flag the suspicious account.
 
 ## AI Tools Used
 
-Claude (Anthropic) was used throughout:
+Claude (Anthropic) and Cursor (IDE) was used throughout:
 - Architecture design and schema decisions (extensive back-and-forth reasoning)
 - Identifying edge cases: lazy expiration pattern, idempotency via processed flag, leaderboard caching strategy
 - Code generation for boilerplate (models, schemas, route handlers)
