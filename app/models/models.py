@@ -140,6 +140,9 @@ class Referral(Base):
 
 class ConversionEvent(Base):
     __tablename__ = "conversion_events"
+    __table_args__ = (
+        UniqueConstraint("referral_id", name="uq_conversion_events_referral"),
+    )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     referral_id = Column(UUID(as_uuid=True), ForeignKey("referrals.id"), nullable=False)

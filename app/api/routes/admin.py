@@ -1,9 +1,10 @@
 import numpy as np
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, text
-from datetime import datetime, timedelta
+from sqlalchemy import select, func
+from datetime import timedelta
 from sklearn.ensemble import IsolationForest
+from app.core.datetime_utils import utc_now_naive
 from app.db.session import get_db
 from app.core.dependencies import get_admin_user
 from app.models.models import User, RateLimitEvent, RateLimitAction
@@ -31,7 +32,7 @@ async def get_anomalies(
     current_user=Depends(get_admin_user),
     db: AsyncSession = Depends(get_db)
 ):
-    window_start = datetime.utcnow() - timedelta(hours=24)
+    window_start = utc_now_naive() - timedelta(hours=24)
 
     # aggregate rate limit events per user+ip in last 24hrs
     result = await db.execute(
@@ -49,7 +50,7 @@ async def get_anomalies(
 
     if not rows:
         return AnomaliesResponse(
-            generated_at=datetime.utcnow(),
+            generated_at=utc_now_naive(),
             window="last_24_hours",
             flagged_accounts=[]
         )
@@ -127,7 +128,7 @@ async def get_anomalies(
             ))
 
     return AnomaliesResponse(
-        generated_at=datetime.utcnow(),
+        generated_at=utc_now_naive(),
         window="last_24_hours",
         flagged_accounts=flagged
     )

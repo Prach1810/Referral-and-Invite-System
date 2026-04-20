@@ -1,8 +1,9 @@
 import json
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, text
+from sqlalchemy import select, func
 from datetime import datetime
+from app.core.datetime_utils import utc_now_naive
 from app.db.session import get_db
 from app.core.redis import get_redis
 from app.models.models import Referral, User, ReferralStatus
@@ -20,18 +21,15 @@ async def get_leaderboard(
     db: AsyncSession = Depends(get_db),
     redis=Depends(get_redis)
 ):
-    # default to current month
     if month is None:
-        month = datetime.utcnow().strftime("%Y-%m")
+        month = utc_now_naive().strftime("%Y-%m")
     else:
-        # validate format
         try:
             parsed = datetime.strptime(month, "%Y-%m")
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid month format. Use YYYY-MM")
 
-        # reject future months
-        now = datetime.utcnow()
+        now = utc_now_naive()
         if parsed.year > now.year or (parsed.year == now.year and parsed.month > now.month):
             raise HTTPException(status_code=400, detail="Cannot request leaderboard for a future month")
 
@@ -77,7 +75,7 @@ async def get_leaderboard(
     response = LeaderboardResponse(month=month, leaderboard=entries)
 
     # cache — longer TTL for past months
-    now = datetime.utcnow()
+    now = utc_now_naive()
     is_current_month = (
         month_start.year == now.year and month_start.month == now.month
     )

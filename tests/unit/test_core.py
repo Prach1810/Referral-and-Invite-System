@@ -103,7 +103,7 @@ class TestCodeGenerator:
         from app.core.code_generator import generate_referral_code
         code = generate_referral_code()
         assert code.startswith("FLIK-")
-        assert len(code) == 9  # FLIK- (5) + 4 chars
+        assert len(code) == 11  # FLIK- (5) + 6 chars
 
     def test_generates_url_safe_code(self):
         from app.core.code_generator import generate_referral_code

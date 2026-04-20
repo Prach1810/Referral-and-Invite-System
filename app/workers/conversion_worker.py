@@ -10,6 +10,8 @@ from app.models.models import (
     ConversionEvent,
     Referral,
     ReferralStatus,
+    ReferralCode,
+    CampaignType,
     CreditsLedger,
     CreditReason,
     User,
@@ -48,8 +50,16 @@ def _grant_referral_badges(session: Session, inviter_id: uuid.UUID, lifetime_cou
 def process_conversion(conversion_event_id: str):
     """
     RQ job: processes a conversion event atomically.
-    Idempotency guaranteed by processed flag.
-    Inviter reward uses tier multipliers; ledger stores base REFERRAL_INVITER + BONUS_TIER delta.
+
+    Idempotency guaranteed by the ``processed`` flag on ``ConversionEvent``.
+
+    Reward rules:
+    - Invitee always receives ``INVITEE_CREDITS`` (promo or personal code).
+    - Inviter credits / badges only apply for **personal** (``DEFAULT``) codes.
+      PROMO codes are owned by the admin who created them, so crediting the
+      inviter there would pay the admin for every campaign signup.
+    - Inviter credits use tier multipliers; the ledger records
+      base ``REFERRAL_INVITER`` + ``BONUS_TIER`` delta for auditability.
     """
     with Session(engine) as session:
         with session.begin():
@@ -72,19 +82,47 @@ def process_conversion(conversion_event_id: str):
             if not referral:
                 return
 
-            event.processed = True
+            campaign_type = session.execute(
+                select(ReferralCode.campaign_type).where(
+                    ReferralCode.id == referral.referral_code_id
+                )
+            ).scalar_one_or_none()
+            is_promo = campaign_type == CampaignType.PROMO
 
+            event.processed = True
             referral.status = ReferralStatus.CONVERTED
             referral.updated_at = utc_now_naive()
-
             session.flush()
+
+            # Invitee always earns credits.
+            session.add(
+                CreditsLedger(
+                    user_id=referral.invitee_id,
+                    amount=INVITEE_CREDITS,
+                    reason=CreditReason.REFERRAL_INVITEE,
+                    reference_id=event.id,
+                )
+            )
+            session.execute(
+                update(User)
+                .where(User.id == referral.invitee_id)
+                .values(credits_balance=User.credits_balance + INVITEE_CREDITS)
+            )
+
+            # Skip inviter-side rewards for promo signups (see docstring).
+            if is_promo:
+                current_month = utc_now_naive().strftime("%Y-%m")
+                redis_client.delete(f"leaderboard:{current_month}")
+                return
 
             lifetime_count = session.execute(
                 select(func.count())
                 .select_from(Referral)
+                .join(ReferralCode, ReferralCode.id == Referral.referral_code_id)
                 .where(
                     Referral.inviter_id == referral.inviter_id,
                     Referral.status == ReferralStatus.CONVERTED,
+                    ReferralCode.campaign_type == CampaignType.DEFAULT,
                 )
             ).scalar_one()
 
@@ -109,26 +147,12 @@ def process_conversion(conversion_event_id: str):
                     )
                 )
 
-            session.add(
-                CreditsLedger(
-                    user_id=referral.invitee_id,
-                    amount=INVITEE_CREDITS,
-                    reason=CreditReason.REFERRAL_INVITEE,
-                    reference_id=event.id,
-                )
-            )
-
             session.execute(
                 update(User)
                 .where(User.id == referral.inviter_id)
                 .values(
                     credits_balance=User.credits_balance + inviter_total,
                 )
-            )
-            session.execute(
-                update(User)
-                .where(User.id == referral.invitee_id)
-                .values(credits_balance=User.credits_balance + INVITEE_CREDITS)
             )
 
             _grant_referral_badges(session, referral.inviter_id, int(lifetime_count))

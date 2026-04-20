@@ -25,7 +25,10 @@ async def get_my_dashboard(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    # lazy expiry before fetching
+    # Lazy expiry before fetching.
+    # The commit here is intentional: the four gather() tasks below each open
+    # their own session, so the EXPIRED status must be visible (READ COMMITTED)
+    # before they run — otherwise pending_referrals would lag by one request.
     await db.execute(
         update(Invitation)
         .where(
