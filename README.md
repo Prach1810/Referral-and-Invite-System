@@ -283,7 +283,6 @@ as admin to see the Isolation Forest flag the suspicious account.
 
 ## What I Would Add With More Time
 
-- Email provider integration (SendGrid/SES) for actual invite delivery
 - STREAK and ENGAGEMENT badges (schema ready; award logic not wired)
 - STREAK badge: "Rising Star" for 5 consecutive posting days
 - ENGAGEMENT badge: awarded for commenting/liking activity
