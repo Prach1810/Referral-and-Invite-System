@@ -16,6 +16,7 @@ Second, Option A rewards depth of thinking over breadth of integration. Option B
 
 Third, the stretch goals in Option A are genuinely interesting engineering problems — tiered rewards, async event processing, anomaly detection — rather than UI polish. I wanted to build something I could reason about deeply rather than something that looked good in a screen recording.
 
+Demo Link : https://drive.google.com/file/d/1ovJFQTzlQ7TE5XrIZZ9N_nWR-OlZZOZS/view?usp=sharing
 ---
 
 ## Quick Start
