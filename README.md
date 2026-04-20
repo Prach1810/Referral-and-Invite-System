@@ -296,6 +296,7 @@ Note: Run the main test flow first to ensure alice@test.com and bob@test.com exi
 - Credit expiration via scheduled task
 - WebSocket or SSE for real-time conversion notifications
 - Structured JSON logging with correlation IDs (uvicorn already logs requests; production would add log aggregation via Datadog/Grafana)
+- Separate test database for integration tests to prevent test data accumulating in the main DB. Currently integration tests run against the same database and use Redis flushes + NullPool connections to isolate state. Production setup would use a dedicated `flikdb_test` database spun up in Docker Compose with a `TESTING_DATABASE_URL` environment variable.
 
 ---
 
