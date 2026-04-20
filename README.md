@@ -311,13 +311,9 @@ Claude (Anthropic) and Cursor (IDE) was used throughout:
 
 ## Running Tests
 
-```bash
-docker-compose exec web pytest tests/ -v
-```
-
 ### Unit tests (no Docker needed)
 ```bash
-docker compose ps && docker compose exec web pytest tests/unit/test_core.py -v
+docker-compose exec web pytest tests/unit/test_core.py -v
 ```
 Covers: tier reward logic, idempotency, rate limiting, fraud detection heuristics, JWT security, code generation, invitation expiry.
 
