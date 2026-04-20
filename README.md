@@ -6,6 +6,18 @@ Built with FastAPI, PostgreSQL, Redis, and RQ.
 
 ---
 
+## Why Option A
+
+I chose the Referral & Invite System over the AI Video Studio for three reasons.
+
+First, my background maps directly to this problem. My work at JPMorgan Chase involved building middle office P&L and risk management systems — credits ledgers, idempotent event processing, and financial audit trails. The referral system is structurally the same domain: immutable ledger entries, atomic credit awards, and event-driven state transitions.
+
+Second, Option A rewards depth of thinking over breadth of integration. Option B's core challenge is wiring together third-party APIs (video generation, object storage, WebSockets) — impressive to demo but evaluated mostly on integration plumbing. Option A has no external dependencies and is entirely about architecture: how you model the data, handle idempotency, prevent fraud, and design for scale. That's a better signal of engineering judgment.
+
+Third, the stretch goals in Option A are genuinely interesting engineering problems — tiered rewards, async event processing, anomaly detection — rather than UI polish. I wanted to build something I could reason about deeply rather than something that looked good in a screen recording.
+
+---
+
 ## Quick Start
 
 ```bash
@@ -158,6 +170,33 @@ Past months   → TTL 30 days (data never changes)
 
 Cache key: `leaderboard:{YYYY-MM}`
 
+### 11. Dashboard parallel queries — tradeoff
+
+`GET /dashboard/me` uses `asyncio.gather` to run 4 queries concurrently, each 
+on its own session. This avoids asyncpg's single-operation-per-connection 
+constraint and demonstrates parallel async execution.
+
+**Known tradeoff:** each request checks out 4 connections from the pool. At 25 
+concurrent dashboard loads that's 100 connections — a standard PostgreSQL pool 
+exhausts quickly. 
+
+**Production fix:** collapse into a single SQL query using CTEs or run queries 
+sequentially on one session. The parallel approach was kept here to demonstrate 
+`asyncio.gather` — in production the CTE approach would be preferred:
+
+\```sql
+WITH invite_stats AS (
+  SELECT COUNT(*) FILTER (WHERE status = 'PENDING') as pending,
+         COUNT(*) as total
+  FROM invitations WHERE inviter_id = :uid
+),
+conversion_stats AS (
+  SELECT COUNT(*) as converted FROM referrals
+  WHERE inviter_id = :uid AND status = 'CONVERTED'
+)
+SELECT * FROM invite_stats, conversion_stats;
+\```
+
 ---
 
 ## API Reference
@@ -269,8 +308,19 @@ Claude (Anthropic) was used throughout:
 
 ## Running Tests
 
+```bash
+docker-compose exec web pytest tests/ -v
+```
+
 ### Unit tests (no Docker needed)
 ```bash
 docker compose ps && docker compose exec web pytest tests/unit/test_core.py -v
 ```
 Covers: tier reward logic, idempotency, rate limiting, fraud detection heuristics, JWT security, code generation, invitation expiry.
+
+
+### Integration tests (requires running Docker stack)
+```bash
+docker-compose exec web pytest tests/integration/ -v
+```
+Covers: full auth flow, referral creation, conversion on first post, invitation lifecycle, dashboard correctness, leaderboard validation, admin role enforcement.

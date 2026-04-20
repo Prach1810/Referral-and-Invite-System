@@ -2,7 +2,7 @@ import asyncio
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, update
-from app.db.session import get_db
+from app.db.session import get_db, AsyncSessionLocal
 from app.core.datetime_utils import utc_now_naive
 from app.core.dependencies import get_current_user
 from app.core.tier_rewards import inviter_tier_multiplier
@@ -37,52 +37,57 @@ async def get_my_dashboard(
     )
     await db.commit()
 
-    # run all queries in parallel
+    # Parallel reads: each task uses its own session (asyncpg does not allow concurrent
+    # operations on a single connection / session).
     async def get_total_invites():
-        result = await db.execute(
-            select(func.count()).where(Invitation.inviter_id == current_user.id)
-        )
-        return result.scalar()
+        async with AsyncSessionLocal() as s:
+            r = await s.execute(
+                select(func.count()).where(Invitation.inviter_id == current_user.id)
+            )
+            return int(r.scalar() or 0)
 
     async def get_pending():
-        result = await db.execute(
-            select(func.count()).where(
-                Invitation.inviter_id == current_user.id,
-                Invitation.status == InvitationStatus.PENDING
+        async with AsyncSessionLocal() as s:
+            r = await s.execute(
+                select(func.count()).where(
+                    Invitation.inviter_id == current_user.id,
+                    Invitation.status == InvitationStatus.PENDING,
+                )
             )
-        )
-        return result.scalar()
+            return int(r.scalar() or 0)
 
     async def get_converted_and_balance():
-        converted_result = await db.execute(
-            select(func.count()).where(
-                Referral.inviter_id == current_user.id,
-                Referral.status == ReferralStatus.CONVERTED,
+        async with AsyncSessionLocal() as s:
+            converted_r = await s.execute(
+                select(func.count()).where(
+                    Referral.inviter_id == current_user.id,
+                    Referral.status == ReferralStatus.CONVERTED,
+                )
             )
-        )
-        balance_result = await db.execute(
-            select(User.credits_balance).where(User.id == current_user.id)
-        )
-        return int(converted_result.scalar() or 0), int(balance_result.scalar() or 0)
+            balance_r = await s.execute(
+                select(User.credits_balance).where(User.id == current_user.id)
+            )
+            return int(converted_r.scalar() or 0), int(balance_r.scalar() or 0)
 
     async def get_earned_badges():
-        result = await db.execute(
-            select(Badge, UserBadge.earned_at)
-            .join(UserBadge, UserBadge.badge_id == Badge.id)
-            .where(UserBadge.user_id == current_user.id)
-            .order_by(UserBadge.earned_at.desc())
-        )
-        rows = result.all()
-        return [
-            EarnedBadgeEntry(
-                badge_id=badge.id,
-                badge_type=badge.badge_type,
-                badge_name=badge.badge_name,
-                description=badge.description,
-                earned_at=earned_at,
+        async with AsyncSessionLocal() as s:
+            r = await s.execute(
+                select(Badge, UserBadge.earned_at)
+                .join(UserBadge, UserBadge.badge_id == Badge.id)
+                .where(UserBadge.user_id == current_user.id)
+                .order_by(UserBadge.earned_at.desc())
             )
-            for badge, earned_at in rows
-        ]
+            rows = r.all()
+            return [
+                EarnedBadgeEntry(
+                    badge_id=badge.id,
+                    badge_type=badge.badge_type,
+                    badge_name=badge.badge_name,
+                    description=badge.description,
+                    earned_at=earned_at,
+                )
+                for badge, earned_at in rows
+            ]
 
     total_invites, pending, (converted, balance), earned = await asyncio.gather(
         get_total_invites(),
